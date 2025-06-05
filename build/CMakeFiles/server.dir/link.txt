@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/server.dir/main.cpp.o CMakeFiles/server.dir/generate_moves.cpp.o CMakeFiles/server.dir/board.cpp.o -o server  /usr/lib/x86_64-linux-gnu/libboost_system.so.1.74.0 

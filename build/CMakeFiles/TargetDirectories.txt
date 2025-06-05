@@ -1,0 +1,3 @@
+/home/adi/Documents/ttt/build/CMakeFiles/server.dir
+/home/adi/Documents/ttt/build/CMakeFiles/edit_cache.dir
+/home/adi/Documents/ttt/build/CMakeFiles/rebuild_cache.dir

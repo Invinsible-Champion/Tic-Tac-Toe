@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Tic Tac Toe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="particles" id="particles"></div>
+    <div class="connection-status" id="connectionStatus">🔌 Connecting...</div>
+
+    <div class="game-container">
+        <h1 class="title">🤖 AI Tic Tac Toe 🤖</h1>
+
+        <div class="game-info">
+            <div class="player-turn" id="playerTurn">Your Turn</div>
+            <div class="score">
+                <div>Human (X): <span id="scoreX">0</span></div>
+                <div>AI (O): <span id="scoreO">0</span></div>
+            </div>
+        </div>
+
+        <div class="game-board" id="gameBoard">
+            <button class="cell" data-index="0"></button>
+            <button class="cell" data-index="1"></button>
+            <button class="cell" data-index="2"></button>
+            <button class="cell" data-index="3"></button>
+            <button class="cell" data-index="4"></button>
+            <button class="cell" data-index="5"></button>
+            <button class="cell" data-index="6"></button>
+            <button class="cell" data-index="7"></button>
+            <button class="cell" data-index="8"></button>
+        </div>
+
+        <div class="status-message" id="statusMessage" style="display: none;"></div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="newGameBtn">New Game</button>
+            <button class="btn btn-secondary" id="resetScoreBtn">Reset Score</button>
+        </div>
+    </div>
+
+    <script>
+        class TicTacToe {
+            constructor() {
+                this.board = Array(9).fill('');
+                this.currentPlayer = 'X';
+                this.gameActive = true;
+                this.scores = { X: 0, O: 0 };
+                this.isAiTurn = false;
+                this.apiBaseUrl = 'http://localhost:9000';
+                this.winningCombinations = [
+                    [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+                    [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+                    [0, 4, 8], [2, 4, 6] // diagonals
+                ];
+                this.winningCells = [];
+
+                this.initializeGame();
+                this.createParticles();
+                this.checkApiConnection();
+            }
+
+            initializeGame() {
+                this.cells = document.querySelectorAll('.cell');
+                this.playerTurnElement = document.getElementById('playerTurn');
+                this.statusMessage = document.getElementById('statusMessage');
+                this.scoreXElement = document.getElementById('scoreX');
+                this.scoreOElement = document.getElementById('scoreO');
+                this.newGameBtn = document.getElementById('newGameBtn');
+                this.resetScoreBtn = document.getElementById('resetScoreBtn');
+                this.connectionStatus = document.getElementById('connectionStatus');
+
+                this.cells.forEach(cell => {
+                    cell.addEventListener('click', this.handleCellClick.bind(this));
+                });
+
+                this.newGameBtn.addEventListener('click', this.newGame.bind(this));
+                this.resetScoreBtn.addEventListener('click', this.resetScore.bind(this));
+
+                this.updateDisplay();
+            }
+
+            async checkApiConnection() {
+                try {
+                    const response = await fetch(`${this.apiBaseUrl}/`);
+                    if (response.ok) {
+                        this.connectionStatus.textContent = '🟢 Connected';
+                        this.connectionStatus.className = 'connection-status connected';
+                    } else {
+                        throw new Error('API not responding');
+                    }
+                } catch (error) {
+                    this.connectionStatus.textContent = '🔴 Disconnected';
+                    this.connectionStatus.className = 'connection-status disconnected';
+                    console.error('API connection failed:', error);
+                }
+            }
+
+            convertBoardToApiFormat() {
+                const apiBoard = [];
+                for (let i = 0; i < 9; i += 3) {
+                    const row = [];
+                    for (let j = 0; j < 3; j++) {
+                        const cell = this.board[i + j];
+                        if (cell === '') {
+                            row.push(-10);
+                        } else if (cell === 'X') {
+                            row.push(1);
+                        } else {
+                            row.push(0);
+                        }
+                    }
+                    apiBoard.push(row);
+                }
+                return apiBoard;
+            }
+
+            async getBestMove() {
+                try {
+                    const apiBoard = this.convertBoardToApiFormat();
+                    const response = await fetch(`${this.apiBaseUrl}/get_best_move`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            Board: apiBoard,
+                            Player: 0
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error('Error getting best move:', error);
+                    this.showMessage('🚫 AI API Error - Playing random move');
+                    return this.getRandomMove();
+                }
+            }
+
+            getRandomMove() {
+                const emptyCells = [];
+                for (let i = 0; i < 9; i++) {
+                    if (this.board[i] === '') {
+                        emptyCells.push(i);
+                    }
+                }
+
+                if (emptyCells.length > 0) {
+                    const randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                    return {
+                        row: Math.floor(randomIndex / 3),
+                        col: randomIndex % 3
+                    };
+                }
+                return { row: -1, col: -1 };
+            }
+
+            async evaluateBoard() {
+                try {
+                    const apiBoard = this.convertBoardToApiFormat();
+                    const response = await fetch(`${this.apiBaseUrl}/evaluate_board`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            Board: apiBoard
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Board evaluation:', data);
+                    return data;
+                } catch (error) {
+                    console.error('Error evaluating board:', error);
+                    return null;
+                }
+            }
+
+            createParticles() {
+                const particlesContainer = document.getElementById('particles');
+
+                // Create floating colored particles
+                for (let i = 0; i < 15; i++) {
+                    const particle = document.createElement('div');
+                    const particleType = Math.floor(Math.random() * 4) + 1;
+
+                    particle.className = `particle particle-${particleType}`;
+                    particle.style.left = Math.random() * 100 + '%';
+                    particle.style.animationDelay = Math.random() * 8 + 's';
+
+                    particlesContainer.appendChild(particle);
+                }
+
+                // Create glowing orbs
+                for (let i = 0; i < 8; i++) {
+                    const orb = document.createElement('div');
+                    orb.className = 'particle particle-orb';
+                    orb.style.left = Math.random() * 100 + '%';
+                    orb.style.animationDelay = Math.random() * 15 + 's';
+                    orb.style.animationDuration = (Math.random() * 5 + 15) + 's';
+
+                    particlesContainer.appendChild(orb);
+                }
+
+                // Create twinkling stars
+                for (let i = 0; i < 25; i++) {
+                    const star = document.createElement('div');
+                    star.className = 'particle';
+                    star.style.width = Math.random() * 3 + 1 + 'px';
+                    star.style.height = star.style.width;
+                    star.style.background = `rgba(255, 255, 255, ${Math.random() * 0.8 + 0.2})`;
+                    star.style.left = Math.random() * 100 + '%';
+                    star.style.top = Math.random() * 100 + '%';
+                    star.style.animation = `twinkle ${Math.random() * 3 + 2}s infinite ease-in-out`;
+                    star.style.animationDelay = Math.random() * 5 + 's';
+
+                    particlesContainer.appendChild(star);
+                }
+            }
+
+            async handleCellClick(event) {
+                const index = parseInt(event.target.dataset.index);
+
+                if (this.board[index] !== '' || !this.gameActive || this.isAiTurn) return;
+
+                // Human move
+                this.makeMove(index, 'X');
+
+                if (this.gameActive && !(await this.checkGameEnd())) {
+
+                    this.isAiTurn = true;
+                    this.playerTurnElement.textContent = 'AI is thinking...';
+
+
+                    setTimeout(async () => {
+                        await this.makeAiMove();
+                    }, 500);
+                }
+            }
+
+            makeMove(index, player) {
+                this.board[index] = player;
+                this.cells[index].textContent = player;
+                this.cells[index].classList.add(player.toLowerCase());
+
+                // Haptic feedback
+                this.triggerHapticFeedback(this.cells[index]);
+            }
+
+            async makeAiMove() {
+                const bestMove = await this.getBestMove();
+
+                if (bestMove && bestMove.row !== undefined && bestMove.col !== undefined) {
+                    const index = bestMove.row * 3 + bestMove.col;
+
+                    if (this.board[index] === '') {
+                        this.makeMove(index, 'O');
+                    }
+                }
+
+                this.isAiTurn = false;
+                await this.checkGameEnd();
+                this.updateDisplay();
+            }
+
+            async checkGameEnd() {
+                const evaluationData = await this.evaluateBoard();
+                if (!evaluationData) {
+                    // API error fallback: fallback to local checkWinner()
+                    if (this.checkWinner()) {
+                        this.gameActive = false;
+                        this.scores[this.currentPlayer]++;
+                        this.showWinAnimation();
+                        if (this.currentPlayer === 'X') {
+                            this.scores.X++;
+                            this.showMessage('🎉 You Win! 🎉');
+                        } else {
+                            this.scores.O++;
+                            this.showMessage('🤖 AI Wins! 🤖');
+                        }
+                        this.createConfetti();
+                        return true;
+                    } else if (this.board.every(cell => cell !== '')) {
+                        this.scores.O++;
+                        this.scores.X++;
+                        this.gameActive = false;
+                        this.showMessage("🤝 It's a Draw! 🤝");
+                        return true;
+                    }
+                    return false;
+                }
+
+                const evalResult = evaluationData.evaluation;
+
+                if (evalResult === 10) {
+                    this.gameActive = false;
+                    this.scores.X++;
+                    this.showWinAnimation();
+                    this.showMessage('🎉 You Win! 🎉');
+                    this.createConfetti();
+                    return true;
+                } else if (evalResult === -10) {
+                    this.gameActive = false;
+                    this.scores.O++;
+                    this.showWinAnimation();
+                    this.showMessage('🤖 AI Wins! 🤖');
+                    this.createConfetti();
+                    return true;
+                } else if (evalResult === 0 && this.board.every(cell => cell !== '')) {
+                    this.gameActive = false;
+                    this.showMessage("🤝 It's a Draw! 🤝");
+                    return true;
+                }
+
+
+                this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
+                return false;
+            }
+
+
+            triggerHapticFeedback(element) {
+                element.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    element.style.transform = '';
+                }, 100);
+
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+            }
+
+            checkWinner() {
+                return this.winningCombinations.some(combination => {
+                    const [a, b, c] = combination;
+                    if (this.board[a] && this.board[a] === this.board[b] && this.board[a] === this.board[c]) {
+                        this.winningCells = combination;
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
+            showWinAnimation() {
+                this.winningCells.forEach(index => {
+                    this.cells[index].classList.add('winning-cell');
+                });
+            }
+
+            showMessage(message) {
+                this.statusMessage.textContent = message;
+                this.statusMessage.style.display = 'block';
+
+                setTimeout(() => {
+                    this.statusMessage.style.display = 'none';
+                }, 3000);
+            }
+
+            createConfetti() {
+                for (let i = 0; i < 50; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.backgroundColor = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffd93d'][Math.floor(Math.random() * 5)];
+                    confetti.style.animationDelay = Math.random() * 3 + 's';
+                    document.body.appendChild(confetti);
+
+                    setTimeout(() => {
+                        confetti.remove();
+                    }, 3000);
+                }
+            }
+
+            updateDisplay() {
+                if (this.isAiTurn) {
+                    this.playerTurnElement.textContent = 'AI is thinking...';
+                } else if (this.gameActive) {
+                    if (this.currentPlayer === 'X') {
+                        this.playerTurnElement.textContent = "Your Turn";
+                    } else {
+                        this.playerTurnElement.textContent = "AI's Turn";
+                    }
+                } else {
+                    this.playerTurnElement.textContent = 'Game Over';
+                }
+
+                this.scoreXElement.textContent = this.scores.X;
+                this.scoreOElement.textContent = this.scores.O;
+            }
+
+            newGame() {
+                this.board = Array(9).fill('');
+                this.currentPlayer = 'X';
+                this.gameActive = true;
+                this.isAiTurn = false;
+                this.winningCells = [];
+
+                this.cells.forEach(cell => {
+                    cell.textContent = '';
+                    cell.classList.remove('x', 'o', 'winning-cell');
+                });
+
+                this.statusMessage.style.display = 'none';
+                this.updateDisplay();
+            }
+
+            resetScore() {
+                this.scores = { X: 0, O: 0 };
+                this.updateDisplay();
+                this.newGame();
+            }
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new TicTacToe();
+        });
+    </script>
+</body>
+
+</html>
