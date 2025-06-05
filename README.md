@@ -45,7 +45,7 @@ Fallback logic and random move selection are implemented to handle API failures 
 
  2. Build the backend using:
    ```bash
-     mkdir build
+     
      cd build
      cmake ..
      make  
@@ -53,5 +53,12 @@ Fallback logic and random move selection are implemented to handle API failures 
 3. Run the server using 
   ```bash
      ./server
+```
+### Frontend Setup
+1. Navigate to the website folder
+2. Start the local server and run the website in your browser.
+```bash
+   cd website
+   python3 -m http.server 8000
 ```
 
